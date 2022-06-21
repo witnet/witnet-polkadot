@@ -1,7 +1,7 @@
 # pallet-witnet-oracle
 
-A substrate pallet that enables sending data requests to the Witnet oracle from any Polkadot parachain, as well as
-getting the results of the requests relayed back.  
+A (rather centralized for now) substrate pallet that enables sending data requests to the Witnet oracle from any
+Polkadot or Kusama parachain, as well as getting the results of the requests relayed back.  
 
 ##  Usage
 
