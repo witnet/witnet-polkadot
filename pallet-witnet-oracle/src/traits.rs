@@ -92,7 +92,7 @@ where
         // Reject oversized results
         let bounded_bytes: BoundedVec<_, T::MaxByteSize> = result_bytes
             .try_into()
-            .map_err(|()| Error::<T>::OversizedRequest)?;
+            .map_err(|()| Error::<T>::OversizedResult)?;
 
         // Do storage related operations in a separate `inner_report_result` function
         // This will allow reusing part that logic in a future batch reporting method
@@ -141,7 +141,12 @@ where
         ensure!(account_id != sender, Error::<T>::OperatorSelfRemoval);
 
         // Try to remove the account id from the operators collection
-        Operators::<T>::take(account_id).ok_or_else(|| Error::<T>::UnknownOperator)?;
+        Operators::<T>::take(account_id.clone()).ok_or_else(|| Error::<T>::UnknownOperator)?;
+
+        Self::deposit_event(Event::<T>::RemovedOperator {
+            removed_operator: account_id,
+            removed_by: sender,
+        });
 
         Ok(())
     }

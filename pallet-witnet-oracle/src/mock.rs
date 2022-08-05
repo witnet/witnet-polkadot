@@ -1,6 +1,6 @@
 use frame_support::{
     parameter_types,
-    traits::{ConstU32, ConstU64},
+    traits::{ConstU32, ConstU64, GenesisBuild},
 };
 use sp_runtime::testing::Header;
 use sp_runtime::traits::IdentityLookup;
@@ -79,8 +79,10 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
+pub const MAX_WITNET_BYTE_SIZE: u16 = 2048;
+
 parameter_types! {
-    pub const MaxWitnetByteSize: u16 = 2048;
+    pub const MaxWitnetByteSize: u16 = MAX_WITNET_BYTE_SIZE;
 }
 
 impl pallet_witnet_oracle::Config for Test {
@@ -95,17 +97,20 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        // Account #5 will be pre-approved as an operator
+        let operators = vec![5];
+
+        let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+        pallet_witnet_oracle::GenesisConfig::<Test>::from_operators(operators)
+            .assimilate_storage(&mut t)
             .unwrap();
-        let mut ext = sp_io::TestExternalities::new(t);
-        ext.execute_with(|| System::set_block_number(1));
-        ext
+        t.into()
     }
 
     pub fn build_and_execute(self, test: impl FnOnce() -> ()) {
         self.build().execute_with(|| {
-            test();
+            System::set_block_number(1);
+            test()
         })
     }
 }

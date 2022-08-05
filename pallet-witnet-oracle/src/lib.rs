@@ -3,6 +3,7 @@
 extern crate frame_support;
 extern crate frame_system;
 extern crate scale_info;
+extern crate sp_runtime;
 
 use frame_support::{pallet_prelude::*, traits::ReservableCurrency};
 use frame_system::pallet_prelude::*;
@@ -56,6 +57,12 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub operators: Vec<T::AccountId>,
+    }
+
+    impl<T: Config> GenesisConfig<T> {
+        pub fn from_operators(operators: Vec<T::AccountId>) -> Self {
+            Self { operators }
+        }
     }
 
     #[cfg(feature = "std")]
@@ -161,7 +168,7 @@ pub mod pallet {
 }
 
 pub mod prelude {
-    pub use crate::pallet::Config as WitnetConfig;
+    pub use crate::pallet::{Config as WitnetConfig, Error as WitnetError, Event as WitnetEvent};
     pub use crate::traits::*;
     pub use crate::types::*;
 }
