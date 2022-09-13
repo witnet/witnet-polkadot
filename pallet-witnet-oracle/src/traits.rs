@@ -109,7 +109,7 @@ where
         }
 
         // Deposit event to signal eventual resolution of the data request
-        Self::deposit_event(Event::<T>::PostedResult { request_id, reporter: reporter });
+        Self::deposit_event(Event::<T>::PostedResult { request_id, reporter });
 
         Ok(())
     }
@@ -147,7 +147,7 @@ where
         ensure!(account_id != sender, Error::<T>::OperatorSelfRemoval);
 
         // Try to remove the account id from the operators collection
-        Operators::<T>::take(account_id.clone()).ok_or_else(|| Error::<T>::UnknownOperator)?;
+        Operators::<T>::take(account_id.clone()).ok_or(Error::<T>::UnknownOperator)?;
 
         Self::deposit_event(Event::<T>::RemovedOperator {
             removed_operator: account_id,

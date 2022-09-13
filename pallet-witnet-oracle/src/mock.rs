@@ -114,7 +114,7 @@ impl ExtBuilder {
         t.into()
     }
 
-    pub fn build_and_execute(self, test: impl FnOnce() -> ()) {
+    pub fn build_and_execute(self, test: impl FnOnce()) {
         self.build().execute_with(|| {
             System::set_block_number(1);
             test()

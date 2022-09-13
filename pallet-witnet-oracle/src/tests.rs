@@ -60,7 +60,7 @@ fn test_post_request() {
         );
 
         // A second request should get a different ID
-        let post = post_dummy_request(requester.clone(), None);
+        let post = post_dummy_request(requester, None);
         assert_ok!(post);
         System::assert_last_event(
             WitnetEvent::<Test>::PostedRequest {
@@ -97,7 +97,7 @@ fn test_report_result() {
 
         // This should fail because account #7 is not allowed to report
         let report = Witnet::report_result(
-            requester.clone(),
+            requester,
             0,
             999,
             [0; 32],
@@ -180,7 +180,7 @@ fn test_report_result() {
 
         // This should fail because it is a duplicated report
         let report = Witnet::report_result(
-            reporter.clone(),
+            reporter,
             0,
             999,
             [0; 32],
@@ -307,7 +307,7 @@ fn test_operators() {
 
         // The recently removed operator should no longer be able to report
         let report = Witnet::report_result(
-            account_seven.clone(),
+            account_seven,
             2,
             999,
             [0; 32],
@@ -318,7 +318,7 @@ fn test_operators() {
 
         // But the third operator (account #9) should still be able to report
         let report = Witnet::report_result(
-            account_nine.clone(),
+            account_nine,
             2,
             999,
             [0; 32],
@@ -334,7 +334,7 @@ fn test_operators() {
         );
 
         // You should not be able to remove an operator that never existed
-        let remove = Witnet::remove_operator(genesis_operator.clone(), 11);
+        let remove = Witnet::remove_operator(genesis_operator, 11);
         let expected = Err(WitnetError::<Test>::UnknownOperator.into());
         assert_eq!(remove, expected);
     })
