@@ -12,7 +12,11 @@ pub type Query<T> = (
 );
 pub type RequestId = u64;
 
-pub type RequestEntry<T> = (Option<Query<T>>, Option<Response<T>>);
+pub type RequestEntry<T> = (
+    Option<Query<T>>,
+    Option<Response<T>>,
+    Option<<T as frame_system::Config>::AccountId>,
+);
 
 pub type Response<T> = (
     Timestamp<T>,

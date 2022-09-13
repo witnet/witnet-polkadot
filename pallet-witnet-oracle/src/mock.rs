@@ -100,7 +100,9 @@ impl ExtBuilder {
         // Account #5 will be pre-approved as an operator
         let operators = vec![5];
 
-        let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+        let mut t = frame_system::GenesisConfig::default()
+            .build_storage::<Test>()
+            .unwrap();
         pallet_witnet_oracle::GenesisConfig::<Test>::from_operators(operators)
             .assimilate_storage(&mut t)
             .unwrap();

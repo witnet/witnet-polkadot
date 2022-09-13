@@ -1,6 +1,9 @@
 use std::convert::TryInto;
 
-use frame_support::{sp_runtime::traits::Zero, traits::Time};
+use frame_support::{
+    sp_runtime::traits::Zero,
+    traits::{tokens::BalanceStatus, Time},
+};
 use frame_system::ensure_signed;
 
 use core::convert::Into;
@@ -53,7 +56,7 @@ where
         let request_id = NextRequestId::<T>::get();
 
         // Store request and deposit event to signal readiness for fulfillment
-        let request_entry: RequestEntry<T> = (Some((bytes, reward)), None);
+        let request_entry: RequestEntry<T> = (Some((bytes, reward)), None, Some(sender.clone()));
         Requests::<T>::insert(request_id, request_entry);
         Self::deposit_event(Event::<T>::PostedRequest { request_id, sender });
 
@@ -96,10 +99,13 @@ where
 
         // Do storage related operations in a separate `inner_report_result` function
         // This will allow reusing part that logic in a future batch reporting method
-        let payable =
+        let (reward, requester) =
             inner_report_result::<T>(request_id, timestamp, dr_tx_hash, bounded_bytes, true)?;
-        if payable > Zero::zero() {
-            T::Currency::unreserve(&sender, payable);
+        if reward > Zero::zero() {
+            // Transfer reserved values from the requester to the reporter
+            T::Currency::repatriate_reserved(&requester, &sender, reward, BalanceStatus::Free)?;
+            // Send reward to the reporter
+            T::Currency::unreserve(&sender, reward);
         }
 
         // Deposit event to signal eventual resolution of the data request
@@ -175,32 +181,32 @@ fn inner_report_result<T: Config>(
     dr_tx_hash: [u8; 32],
     result_bytes: BoundedVec<u8, T::MaxByteSize>,
     drop: bool,
-) -> Result<BalanceOf<T>, Error<T>> {
+) -> Result<(BalanceOf<T>, <T as frame_system::Config>::AccountId), Error<T>> {
     // Retrieve request info from storage, fail if unknown
-    let payable = <Requests<T>>::try_mutate(request_id, |entry| {
+    <Requests<T>>::try_mutate(request_id, |entry| {
         match entry {
             // Ensure the request exists
             None => Err(Error::<T>::UnknownRequest),
             // Ensure the request had not been already reported
-            Some((_, Some(_))) => Err(Error::<T>::AlreadyReported),
+            Some((_, Some(_), ..)) => Err(Error::<T>::AlreadyReported),
             // If the query is still there, we can operate, otherwise do nothing
-            Some((query @ Some(_), report @ None)) => {
+            Some((query_option @ Some(_), report_option @ None, requester_option @ Some(_))) => {
                 // It is safe to unwrap the query reward here because it's guarded above
-                let reward = query.clone().unwrap().1;
-                // If drop is set to true, remove query when inserting the report
+                let reward = query_option.clone().unwrap().1;
+                let requester = requester_option.clone().unwrap();
+                // If drop is set to true, remove query and requesterwhen inserting the report
                 if drop {
-                    *query = None;
+                    *query_option = None;
+                    *requester_option = None;
                 }
                 // Insert the report
-                *report = Some((timestamp, dr_tx_hash, result_bytes));
+                *report_option = Some((timestamp, dr_tx_hash, result_bytes));
 
-                Ok(reward)
+                Ok((reward, requester))
             }
             _ => unreachable!(),
         }
-    })?;
-
-    Ok(payable)
+    })
 }
 
 pub fn estimate_report_reward<Balance: frame_support::sp_runtime::traits::Zero>(
