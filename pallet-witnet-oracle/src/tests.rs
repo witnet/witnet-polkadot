@@ -6,43 +6,66 @@ use crate::{
     prelude::*,
 };
 
-fn post_dummy_request(origin: Origin) -> DispatchResult {
-    Witnet::post_request(origin, BalanceOf::<Test>::zero(), vec![])
+fn post_dummy_request(origin: Origin, reward: Option<BalanceFor<Test>>) -> DispatchResult {
+    let reward = reward.unwrap_or_default();
+    Witnet::post_request(origin, reward, vec![])
 }
 
 #[test]
 fn test_post_request() {
     ExtBuilder::default().build_and_execute(|| {
-        let account_seven = Origin::signed(7);
+        let reward = 123;
+        let requester_id = 7;
+        let requester = Origin::signed(7);
         let max_byte_size = usize::from(MAX_WITNET_BYTE_SIZE);
+
+        let initial_requester_free_balance =
+            <Test as WitnetConfig>::Currency::free_balance(&requester_id);
+        let initial_requester_reserved_balance =
+            <Test as WitnetConfig>::Currency::reserved_balance(&requester_id);
 
         // This should fail because we are providing too many bytes
         let post = Witnet::post_request(
-            account_seven.clone(),
-            BalanceOf::<Test>::zero(),
+            requester.clone(),
+            BalanceFor::<Test>::zero(),
             vec![0; max_byte_size + 1],
         );
         let expected = Err(WitnetError::<Test>::OversizedRequest.into());
         assert_eq!(post, expected);
 
         // This should work!
-        let post = post_dummy_request(account_seven.clone());
+        let post = post_dummy_request(requester.clone(), Some(reward));
         assert_ok!(post);
         System::assert_last_event(
             WitnetEvent::<Test>::PostedRequest {
                 request_id: 0,
-                sender: 7,
+                requester: 7,
             }
             .into(),
         );
 
+        let after_post_requester_free_balance =
+            <Test as WitnetConfig>::Currency::free_balance(&requester_id);
+        let after_post_requester_reserved_balance =
+            <Test as WitnetConfig>::Currency::reserved_balance(&requester_id);
+
+        // Check balance changes
+        assert_eq!(
+            initial_requester_free_balance - after_post_requester_free_balance,
+            reward
+        );
+        assert_eq!(
+            after_post_requester_reserved_balance - initial_requester_reserved_balance,
+            reward
+        );
+
         // A second request should get a different ID
-        let post = post_dummy_request(account_seven.clone());
+        let post = post_dummy_request(requester.clone(), None);
         assert_ok!(post);
         System::assert_last_event(
             WitnetEvent::<Test>::PostedRequest {
                 request_id: 1,
-                sender: 7,
+                requester: 7,
             }
             .into(),
         );
@@ -52,17 +75,29 @@ fn test_post_request() {
 #[test]
 fn test_report_result() {
     ExtBuilder::default().build_and_execute(|| {
-        let genesis_operator = Origin::signed(5);
-        let account_seven = Origin::signed(7);
+        let reward = 123;
+        let reporter_id = 5;
+        let reporter = Origin::signed(reporter_id);
+        let requester_id = 7;
+        let requester = Origin::signed(requester_id);
         let max_byte_size = usize::from(MAX_WITNET_BYTE_SIZE);
 
         <Test as WitnetConfig>::TimeProvider::set_timestamp(1000);
 
-        post_dummy_request(account_seven.clone()).ok();
+        let initial_requester_free_balance =
+            <Test as WitnetConfig>::Currency::free_balance(&requester_id);
+        let initial_requester_reserved_balance =
+            <Test as WitnetConfig>::Currency::reserved_balance(&requester_id);
+        let initial_reporter_free_balance =
+            <Test as WitnetConfig>::Currency::free_balance(&reporter_id);
+        let initial_reporter_reserved_balance =
+            <Test as WitnetConfig>::Currency::reserved_balance(&reporter_id);
+
+        post_dummy_request(requester.clone(), Some(reward)).ok();
 
         // This should fail because account #7 is not allowed to report
         let report = Witnet::report_result(
-            account_seven.clone(),
+            requester.clone(),
             0,
             999,
             [0; 32],
@@ -73,7 +108,7 @@ fn test_report_result() {
 
         // This should fail because we are reporting a result from the future
         let report = Witnet::report_result(
-            genesis_operator.clone(),
+            reporter.clone(),
             0,
             1000,
             [0; 32],
@@ -83,13 +118,13 @@ fn test_report_result() {
         assert_eq!(report, expected);
 
         // This should fail because the result cannot be empty
-        let report = Witnet::report_result(genesis_operator.clone(), 0, 999, [0; 32], vec![]);
+        let report = Witnet::report_result(reporter.clone(), 0, 999, [0; 32], vec![]);
         let expected = Err(WitnetError::<Test>::EmptyResult.into());
         assert_eq!(report, expected);
 
         // This should fail because the result is oversized
         let report = Witnet::report_result(
-            genesis_operator.clone(),
+            reporter.clone(),
             0,
             999,
             [0; 32],
@@ -100,7 +135,7 @@ fn test_report_result() {
 
         // This should fail because the request is unknown
         let report = Witnet::report_result(
-            genesis_operator.clone(),
+            reporter.clone(),
             1,
             999,
             [0; 32],
@@ -111,7 +146,7 @@ fn test_report_result() {
 
         // This should work!
         let report = Witnet::report_result(
-            genesis_operator.clone(),
+            reporter.clone(),
             0,
             999,
             [0; 32],
@@ -121,14 +156,31 @@ fn test_report_result() {
         System::assert_last_event(
             WitnetEvent::<Test>::PostedResult {
                 request_id: 0,
-                sender: 5,
+                reporter: 5,
             }
             .into(),
         );
 
+        let final_requester_free_balance =
+            <Test as WitnetConfig>::Currency::free_balance(&requester_id);
+        let final_requester_reserved_balance =
+            <Test as WitnetConfig>::Currency::reserved_balance(&requester_id);
+        let final_reporter_free_balance =
+            <Test as WitnetConfig>::Currency::free_balance(&reporter_id);
+        let final_reporter_reserved_balance =
+            <Test as WitnetConfig>::Currency::reserved_balance(&reporter_id);
+
+        // Check balance changes
+        assert_eq!(initial_requester_free_balance - final_requester_free_balance, final_reporter_free_balance - initial_reporter_free_balance);
+        assert_eq!(initial_requester_free_balance - final_requester_free_balance, reward);
+        assert_eq!(final_reporter_free_balance - initial_reporter_free_balance, reward);
+        assert_eq!(final_requester_reserved_balance, initial_requester_reserved_balance);
+        assert_eq!(final_reporter_reserved_balance, initial_reporter_reserved_balance);
+
+
         // This should fail because it is a duplicated report
         let report = Witnet::report_result(
-            genesis_operator.clone(),
+            reporter.clone(),
             0,
             999,
             [0; 32],
@@ -139,7 +191,7 @@ fn test_report_result() {
         System::assert_last_event(
             WitnetEvent::<Test>::PostedResult {
                 request_id: 0,
-                sender: 5,
+                reporter: 5,
             }
             .into(),
         );
@@ -156,9 +208,9 @@ fn test_operators() {
 
         <Test as WitnetConfig>::TimeProvider::set_timestamp(1000);
 
-        post_dummy_request(account_seven.clone()).ok();
-        post_dummy_request(account_seven.clone()).ok();
-        post_dummy_request(account_seven.clone()).ok();
+        post_dummy_request(account_seven.clone(), None).ok();
+        post_dummy_request(account_seven.clone(), None).ok();
+        post_dummy_request(account_seven.clone(), None).ok();
 
         // This should fail because account #7 is not allowed to report yet
         let report = Witnet::report_result(
@@ -204,7 +256,7 @@ fn test_operators() {
         System::assert_last_event(
             WitnetEvent::<Test>::PostedResult {
                 request_id: 0,
-                sender: 7,
+                reporter: 7,
             }
             .into(),
         );
@@ -232,7 +284,7 @@ fn test_operators() {
         System::assert_last_event(
             WitnetEvent::<Test>::PostedResult {
                 request_id: 1,
-                sender: 9,
+                reporter: 9,
             }
             .into(),
         );
@@ -276,7 +328,7 @@ fn test_operators() {
         System::assert_last_event(
             WitnetEvent::<Test>::PostedResult {
                 request_id: 2,
-                sender: 9,
+                reporter: 9,
             }
             .into(),
         );

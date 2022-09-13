@@ -99,9 +99,14 @@ impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
         // Account #5 will be pre-approved as an operator
         let operators = vec![5];
+        // Fund all accounts in [0, 10) with a balance of 1_000
+        let balances = (0..10).map(|i| (i, 1_000)).collect::<Vec<_>>();
 
         let mut t = frame_system::GenesisConfig::default()
             .build_storage::<Test>()
+            .unwrap();
+        pallet_balances::GenesisConfig::<Test> { balances }
+            .assimilate_storage(&mut t)
             .unwrap();
         pallet_witnet_oracle::GenesisConfig::<Test>::from_operators(operators)
             .assimilate_storage(&mut t)

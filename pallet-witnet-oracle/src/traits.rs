@@ -16,11 +16,11 @@ pub trait WitnetOracle<T, O>
 where
     T: Config,
 {
-    fn post_request(origin: O, reward: BalanceOf<T>, bytes: Vec<u8>) -> DispatchResult;
+    fn post_request(origin: O, reward: BalanceFor<T>, bytes: Vec<u8>) -> DispatchResult;
     fn report_result(
         origin: O,
         request_id: u64,
-        timestamp: Timestamp<T>,
+        timestamp: TimestampFor<T>,
         dr_tx_hash: [u8; 32],
         result_bytes: Vec<u8>,
     ) -> DispatchResult;
@@ -33,7 +33,7 @@ where
     T: Config,
     O: Into<Result<frame_system::RawOrigin<T::AccountId>, O>>,
 {
-    fn post_request(origin: O, reward: BalanceOf<T>, bytes: Vec<u8>) -> DispatchResult
+    fn post_request(origin: O, reward: BalanceFor<T>, bytes: Vec<u8>) -> DispatchResult
     where
         O: Into<Result<frame_system::RawOrigin<T::AccountId>, O>>,
     {
@@ -46,7 +46,7 @@ where
             .map_err(|()| Error::<T>::OversizedRequest)?;
 
         // Check that the report reward foreseeably covers cost of reporting
-        let required_reward = estimate_report_reward::<BalanceOf<T>>(bytes.len());
+        let required_reward = estimate_report_reward::<BalanceFor<T>>(bytes.len());
         ensure!(reward >= required_reward, Error::<T>::UnderpayingRequest);
 
         // Try to put aside the reward to be paid later to the reporter of the result
@@ -58,7 +58,7 @@ where
         // Store request and deposit event to signal readiness for fulfillment
         let request_entry: RequestEntry<T> = (Some((bytes, reward)), None, Some(sender.clone()));
         Requests::<T>::insert(request_id, request_entry);
-        Self::deposit_event(Event::<T>::PostedRequest { request_id, sender });
+        Self::deposit_event(Event::<T>::PostedRequest { request_id, requester: sender });
 
         // Increase next request ID
         NextRequestId::<T>::put(request_id.wrapping_add(1));
@@ -69,7 +69,7 @@ where
     fn report_result(
         origin: O,
         request_id: u64,
-        timestamp: Timestamp<T>,
+        timestamp: TimestampFor<T>,
         dr_tx_hash: [u8; 32],
         result_bytes: Vec<u8>,
     ) -> DispatchResult
@@ -77,11 +77,11 @@ where
         O: Into<Result<frame_system::RawOrigin<T::AccountId>, O>>,
     {
         // Ensure that the transaction is signed, and get hold of signer data
-        let sender = ensure_signed(origin)?;
+        let reporter = ensure_signed(origin)?;
 
         // Ensure that the sender is entitled to report
         ensure!(
-            Operators::<T>::contains_key(&sender),
+            Operators::<T>::contains_key(&reporter),
             Error::<T>::UnauthorizedOperator
         );
 
@@ -103,13 +103,13 @@ where
             inner_report_result::<T>(request_id, timestamp, dr_tx_hash, bounded_bytes, true)?;
         if reward > Zero::zero() {
             // Transfer reserved values from the requester to the reporter
-            T::Currency::repatriate_reserved(&requester, &sender, reward, BalanceStatus::Free)?;
+            T::Currency::repatriate_reserved(&requester, &reporter, reward, BalanceStatus::Free)?;
             // Send reward to the reporter
-            T::Currency::unreserve(&sender, reward);
+            T::Currency::unreserve(&reporter, reward);
         }
 
         // Deposit event to signal eventual resolution of the data request
-        Self::deposit_event(Event::<T>::PostedResult { request_id, sender });
+        Self::deposit_event(Event::<T>::PostedResult { request_id, reporter: reporter });
 
         Ok(())
     }
@@ -177,11 +177,11 @@ where
 
 fn inner_report_result<T: Config>(
     request_id: u64,
-    timestamp: Timestamp<T>,
+    timestamp: TimestampFor<T>,
     dr_tx_hash: [u8; 32],
     result_bytes: BoundedVec<u8, T::MaxByteSize>,
     drop: bool,
-) -> Result<(BalanceOf<T>, <T as frame_system::Config>::AccountId), Error<T>> {
+) -> Result<(BalanceFor<T>, T::AccountId), Error<T>> {
     // Retrieve request info from storage, fail if unknown
     <Requests<T>>::try_mutate(request_id, |entry| {
         match entry {

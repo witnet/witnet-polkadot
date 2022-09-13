@@ -89,12 +89,12 @@ pub mod pallet {
         /// A request has been posted.
         PostedRequest {
             request_id: RequestId,
-            sender: T::AccountId,
+            requester: T::AccountId,
         },
         /// A request has been resolved.
         PostedResult {
             request_id: RequestId,
-            sender: T::AccountId,
+            reporter: T::AccountId,
         },
         /// A new operator has been added.
         AddedOperator {
@@ -140,7 +140,7 @@ pub mod pallet {
         #[pallet::weight(50_000_000)]
         pub fn post_request(
             origin: OriginFor<T>,
-            reward: BalanceOf<T>,
+            reward: BalanceFor<T>,
             bytes: Vec<u8>,
         ) -> DispatchResult {
             <Pallet<T> as traits::WitnetOracle<T, OriginFor<T>>>::post_request(
@@ -152,7 +152,7 @@ pub mod pallet {
         pub fn report_result(
             origin: OriginFor<T>,
             request_id: u64,
-            timestamp: Timestamp<T>,
+            timestamp: TimestampFor<T>,
             dr_tx_hash: [u8; 32],
             result_bytes: Vec<u8>,
         ) -> DispatchResult {
